@@ -1,0 +1,12 @@
+{
+    "path": "/test",
+    "response": "{\"from\":\"testServer\",\"path\":\"/test\"}",
+    "responseHeaders": {
+        "x-powered-by": "Express",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "36",
+        "etag": "W/\"24-v7aF5mF8M4MlwF6cJBFeKmUqMZ0\"",
+        "date": "Sun, 25 Nov 2018 02:54:06 GMT",
+        "connection": "close"
+    }
+}
