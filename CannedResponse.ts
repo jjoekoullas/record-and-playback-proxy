@@ -1,13 +1,9 @@
 import * as http from 'http'
-import fs from 'fs'
-import {promisify} from 'util'
-import { option, either } from 'fp-ts'
+import { option, function as f } from 'fp-ts'
 import * as t from 'io-ts';
-import {PathReporter} from 'io-ts/lib/PathReporter'
-
-const readDir = promisify(fs.readdir),
-    readFile = promisify(fs.readFile);
-
+import {PathReporter, failure as pFailure} from 'io-ts/lib/PathReporter'
+import * as FileRepo from './FileRepo'
+import bodyParser = require('body-parser');
 
 const tCannedResponse = t.interface({
     path: t.string,
@@ -15,33 +11,27 @@ const tCannedResponse = t.interface({
     responseHeaders: t.dictionary(t.string, t.union([t.undefined, t.number, t.string, t.array(t.string)]))
 });
 
-const tCannedResponses = t.array(t.clean<CannedResponse, CannedResponse>(tCannedResponse));
+export const unsafeCannedResponsesValidator: (i: unknown) => CannedResponse =
+    (i: unknown) => tCannedResponse
+        .decode(i)
+        .getOrElseL(e => { throw new Error(pFailure(e).join('\n')) })
 
 export interface CannedResponse extends t.TypeOf<typeof tCannedResponse> {}
 
 type responseLookup = {[path: string]: CannedResponse[]}
 
 const getResponseLookup: () => Promise<responseLookup>
-    = () => readDir('./cannedResponses')
-        .then(files => {
-            console.log(`loaded ${files.length} files`);
-
-            return Promise.all(files
-                .filter(file => file.endsWith('.json'))
-                .map(file => readFile(`./cannedResponses/${file}`)))
-            })
-        .then(buffers => {
-            const vCannedResponses = tCannedResponses.decode(buffers.map(b => JSON.parse(b.toString())));
-
-            if(vCannedResponses.isLeft()) {
-                throw PathReporter.report(vCannedResponses)
-            } else
-                return vCannedResponses.value.reduce<responseLookup>((p, c) => {
+    = (() => {
+        let lookup: Promise<responseLookup> | undefined = undefined;
+        return () => lookup || (lookup = FileRepo.getAll()
+        .then(cannedResponses => {
+            return cannedResponses
+                .reduce<responseLookup>((p, c) => {
                     p[c.path] = (p[c.path] || []).concat(c);
 
                     return p;
-                }, {});
-        })
+                }, {})}))
+    })();
 
 function matchCannedResponse(req: http.IncomingMessage, cannedResponse: CannedResponse): boolean {
     return true;
@@ -53,8 +43,7 @@ export const getCannedResponse: (req: http.IncomingMessage) => Promise<option.Op
             else {
                 const url = req.url;
                 return getResponseLookup().then(lookup => {
-                    console.log(`lookup keys: ${Object.keys(lookup)}`)
-                    const response = lookup[url].find(r => matchCannedResponse(req, r))
+                    const response = (lookup[url] || []).find(r => matchCannedResponse(req, r))
                     return response !== undefined
                         ? option.some(response)
                         : option.none;
@@ -63,3 +52,22 @@ export const getCannedResponse: (req: http.IncomingMessage) => Promise<option.Op
                     return option.none})
         }
     };
+
+function createCannedResponse(args: {req: http.IncomingMessage, responseBody: Buffer, responseHeaders: http.OutgoingHttpHeaders}): CannedResponse {
+    return {
+        path: args.req.url || '',
+        response: args.responseBody.toString('utf8'),
+        responseHeaders: args.responseHeaders
+    }
+}
+
+function saveToLookup(c: CannedResponse): Promise<CannedResponse> {
+    return getResponseLookup().then(lookup => {
+        if(lookup[c.path] !== undefined) lookup[c.path].concat(c)
+        else lookup[c.path] = [c]
+
+        return c;
+    });
+}
+
+export const saveCannedResponse = f.compose(x => x.then(FileRepo.save), saveToLookup, createCannedResponse);

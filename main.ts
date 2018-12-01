@@ -1,6 +1,6 @@
 import * as http from 'http'
 import httpProxy from 'http-proxy'
-import { CannedResponse, getCannedResponse } from './CannedResponse';
+import { CannedResponse, getCannedResponse, saveCannedResponse } from './CannedResponse';
 
 const
     proxy = httpProxy.createProxyServer(),
@@ -12,7 +12,7 @@ const
                     res.setHeader(name, value);
             });
             res.end(new Buffer(cannedResponse.value.response));
-            console.log('canned response')
+            console.log('served canned response')
         }
         else
             proxy.web(req, res, {target: 'http://127.0.0.1:31338', selfHandleResponse: false})
@@ -27,14 +27,8 @@ proxy.on('proxyRes', (proxyRes, req, res) => {
         body = Buffer.concat([body, data]);
     });
     proxyRes.on('end', () => {
-        const resHeaders = res.getHeaders();
-        const cannedResponse: CannedResponse = {
-            path: req.url || '',
-            response: body.toString('utf8'),
-            responseHeaders: resHeaders
-            }
-        console.log(`got the thing: '${JSON.stringify(cannedResponse)}'`);
-        JSON.parse(JSON.stringify(cannedResponse))
+        saveCannedResponse({req, responseBody: body, responseHeaders: res.getHeaders()});
+
         res.end(body)
     })
 })
