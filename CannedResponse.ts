@@ -1,12 +1,13 @@
 import * as http from 'http'
 import { option, function as f } from 'fp-ts'
 import * as t from 'io-ts';
-import {PathReporter, failure as pFailure} from 'io-ts/lib/PathReporter'
+import { PathReporter, failure as pFailure } from 'io-ts/lib/PathReporter'
 import * as FileRepo from './FileRepo'
 import bodyParser = require('body-parser');
 
 const tCannedResponse = t.interface({
     path: t.string,
+    verb: t.string,
     response: t.string,
     responseHeaders: t.dictionary(t.string, t.union([t.undefined, t.number, t.string, t.array(t.string)]))
 });
@@ -16,21 +17,22 @@ export const unsafeCannedResponsesValidator: (i: unknown) => CannedResponse =
         .decode(i)
         .getOrElseL(e => { throw new Error(pFailure(e).join('\n')) })
 
-export interface CannedResponse extends t.TypeOf<typeof tCannedResponse> {}
+export interface CannedResponse extends t.TypeOf<typeof tCannedResponse> { }
 
-type responseLookup = {[path: string]: CannedResponse[]}
+type responseLookup = { [path: string]: CannedResponse[] }
 
 const getResponseLookup: () => Promise<responseLookup>
     = (() => {
         let lookup: Promise<responseLookup> | undefined = undefined;
         return () => lookup || (lookup = FileRepo.getAll()
-        .then(cannedResponses => {
-            return cannedResponses
-                .reduce<responseLookup>((p, c) => {
-                    p[c.path] = (p[c.path] || []).concat(c);
+            .then(cannedResponses => {
+                return cannedResponses
+                    .reduce<responseLookup>((p, c) => {
+                        p[c.path] = (p[c.path] || []).concat(c);
 
-                    return p;
-                }, {})}))
+                        return p;
+                    }, {})
+            }))
     })();
 
 function matchCannedResponse(req: http.IncomingMessage, cannedResponse: CannedResponse): boolean {
@@ -39,31 +41,34 @@ function matchCannedResponse(req: http.IncomingMessage, cannedResponse: CannedRe
 
 export const getCannedResponse: (req: http.IncomingMessage) => Promise<option.Option<CannedResponse>>
     = req => {
-            if(req.url === undefined) return Promise.resolve(option.none);
-            else {
-                const url = req.url;
-                return getResponseLookup().then(lookup => {
-                    const response = (lookup[url] || []).find(r => matchCannedResponse(req, r))
-                    return response !== undefined
-                        ? option.some(response)
-                        : option.none;
-                }).catch((e) => {
-                    console.log(`kaboom: ${e}`)
-                    return option.none})
+        if (req.url === undefined) return Promise.resolve(option.none);
+        else {
+            const url = req.url;
+            return getResponseLookup().then(lookup => {
+                const response = (lookup[url] || []).find(r => matchCannedResponse(req, r))
+                return response !== undefined
+                    ? option.some(response)
+                    : option.none;
+            }).catch((e) => {
+                console.log(`kaboom: ${e}`)
+                return option.none
+            })
         }
     };
 
-function createCannedResponse(args: {req: http.IncomingMessage, responseBody: Buffer, responseHeaders: http.OutgoingHttpHeaders}): CannedResponse {
+function createCannedResponse(args: { req: http.IncomingMessage, responseBody: Buffer, responseHeaders: http.OutgoingHttpHeaders }): CannedResponse {
     return {
         path: args.req.url || '',
+        verb: args.req.method || 'GET',
         response: args.responseBody.toString('utf8'),
-        responseHeaders: args.responseHeaders
+        responseHeaders: args.responseHeaders,
+
     }
 }
 
 function saveToLookup(c: CannedResponse): Promise<CannedResponse> {
     return getResponseLookup().then(lookup => {
-        if(lookup[c.path] !== undefined) lookup[c.path].concat(c)
+        if (lookup[c.path] !== undefined) lookup[c.path].concat(c)
         else lookup[c.path] = [c]
 
         return c;
