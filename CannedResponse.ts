@@ -1,15 +1,16 @@
 import * as http from 'http'
 import { option, function as f } from 'fp-ts'
 import * as t from 'io-ts';
-import { PathReporter, failure as pFailure } from 'io-ts/lib/PathReporter'
+import { failure as pFailure } from 'io-ts/lib/PathReporter'
 import * as FileRepo from './FileRepo'
-import bodyParser = require('body-parser');
+import jsonLogic from 'json-logic-js'
 
 const tCannedResponse = t.interface({
     path: t.string,
     verb: t.string,
     response: t.string,
-    responseHeaders: t.dictionary(t.string, t.union([t.undefined, t.number, t.string, t.array(t.string)]))
+    responseHeaders: t.dictionary(t.string, t.union([t.undefined, t.number, t.string, t.array(t.string)])),
+    predicate: t.union([t.boolean, t.object], 'predicate')
 });
 
 export const unsafeCannedResponsesValidator: (i: unknown) => CannedResponse =
@@ -36,7 +37,8 @@ const getResponseLookup: () => Promise<responseLookup>
     })();
 
 function matchCannedResponse(req: http.IncomingMessage, cannedResponse: CannedResponse): boolean {
-    return true;
+    
+    return jsonLogic.apply(cannedResponse.predicate, req);
 }
 
 export const getCannedResponse: (req: http.IncomingMessage) => Promise<option.Option<CannedResponse>>
@@ -62,7 +64,7 @@ function createCannedResponse(args: { req: http.IncomingMessage, responseBody: B
         verb: args.req.method || 'GET',
         response: args.responseBody.toString('utf8'),
         responseHeaders: args.responseHeaders,
-
+        predicate: true
     }
 }
 
@@ -75,4 +77,7 @@ function saveToLookup(c: CannedResponse): Promise<CannedResponse> {
     });
 }
 
-export const saveCannedResponse = f.compose(x => x.then(FileRepo.save), saveToLookup, createCannedResponse);
+export const saveCannedResponse = f.compose(
+    x => x.then(FileRepo.save),
+    saveToLookup,
+    createCannedResponse);

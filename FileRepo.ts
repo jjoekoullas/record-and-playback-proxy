@@ -70,8 +70,7 @@ export async function getAll(): Promise<CannedResponse[]> {
             jsonFiles
                 .map(file => fs.readFile(resolve(path, file)))
                 .map(async buffer => unsafeCannedResponsesValidator(buildCannedResponse(await buffer)))
-        )
-    ));
+        )));
 }
 
 export const save: (c: CannedResponse) => Promise<void> =
@@ -80,7 +79,7 @@ export const save: (c: CannedResponse) => Promise<void> =
         return fs.mkdir(subdirectory, { recursive: true })
             .then(() =>
                 fs.writeFile(
-                    resolve(subdirectory, `${new Date().toString()}.json`),
+                    resolve(subdirectory, `${new Date().toISOString()}.json`),
                     JSON.stringify(c),
                 ))
     }
