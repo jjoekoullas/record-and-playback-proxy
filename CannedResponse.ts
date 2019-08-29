@@ -37,7 +37,6 @@ const getResponseLookup: () => Promise<responseLookup>
     })();
 
 function matchCannedResponse(req: http.IncomingMessage, cannedResponse: CannedResponse): boolean {
-    
     return jsonLogic.apply(cannedResponse.predicate, req);
 }
 

@@ -1,7 +1,8 @@
 import express from 'express';
+import expressFormidable = require('express-formidable')
 
 const app = express()
-        .use(express.json()),
+        .use(expressFormidable()),
     router = express.Router(),
     port = 31338,
     basicResponse = (path: string) => ({from: 'testServer', path});
@@ -17,7 +18,7 @@ router.get('/test', (req, res) => {
 router.post('/post', (req, res) => {
     res.json({
         ...basicResponse('/post'),
-        body: req.body
+        fields: req.fields
     })
 })
 
