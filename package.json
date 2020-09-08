@@ -25,7 +25,7 @@
     "express": "^4.16.4",
     "formidable": "^1.2.1",
     "fp-ts": "^1.11.2",
-    "http-proxy": "^1.17.0",
+    "http-proxy": "^1.18.1",
     "io-ts": "^1.4.2",
     "json-logic-js": "^1.2.2"
   }
